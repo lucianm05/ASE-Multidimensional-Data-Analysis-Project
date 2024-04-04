@@ -1,0 +1,557 @@
+---
+title: "MANEA_LUCIAN_GEORGE_BDSA"
+author: "Manea Lucian George"
+date: "2024-03-01"
+output: 
+  html_document:
+      toc: true
+---
+
+```{r load-packages, include=FALSE}
+pacheteBDSA <- c("knitr", "rmarkdown", "RColorBrewer", "scales", 
+                 "tidyverse","dplyr", "plyr", "ggplot2", "Rmisc", 
+                 "Hmisc","randomForest", "rattle", "rpart.plot", "caret", 
+                 "gmodels", "PresenceAbsence", 
+                 "ROCR", "ca", "plotROC", "ROSE", 
+                 "devtools","rpart", "readxl", "ellipsis","gridExtra"  
+                 )
+#instalare pachete
+install.packages(pacheteBDSA, dependencies = T, repos="http://cran.us.r-project.org")
+
+#incarcare pachete 
+sapply(pacheteBDSA, library, character.only =T)
+```
+
+```{r}
+setwd("C:/C+S/MASTER AN I/SEM II/AMD/proiect")
+
+df <- read.csv("survey_results_public_2023.csv", header=TRUE, sep=",")
+```
+
+# 1. Analiza corespondențelor
+Dorim să vedem care este sentimentul general față de instrumente AI, în funcție de categoriile de vârstă a respondenților. În acest sens, aplicăm analiza corespondențelor pentru următoarele variabile:
+
+Age - categoria de vârstă a respondenților
+```{r}
+table(df$Age)
+```
+
+AISelect - dacă folosesc unelte AI în procesul de dezvoltare
+```{r}
+table(df$AISelect)
+```
+
+
+
+## 1.1. Prelucrarea variabilelor
+Variabilele analizate sunt deja categoriale, însă acestea necesită prelucrare
+
+Age: 
+
+  - filtrăm răspunsurile „Prefer not to say” deoarece nu sunt relevante pentru analiză
+
+  - aplicăm un label pentru a ușura vizualizarea categoriilor
+
+AISelect:
+
+  - aplicăm un label pentru a ușura vizualizarea categoriilor (No - nu folosesc, nu doresc; No_Soon - nu folosesc, dar doresc să folosească în curând; Yes- folosesc)
+
+```{r}
+df$Age1 <- ifelse(df$Age == "Prefer not to say", NA, df$Age)
+df$Age1 <- factor(df$Age1, labels=c("18-24", "25-34", "35-44", "45-54", "55-65", "65+", "18-"))
+
+df$AISelect1 = factor(df$AISelect, labels=c("No", "No_Soon", "Yes"))
+```
+
+
+
+## 1.2. Analiza distribuției răspunsurilor
+
+### Variabila Age1
+
+  - 18- = 4.128
+   
+  - 18-24 = 17.931
+   
+  - 25-34 = 33.247
+   
+  - 35-44 = 20.532
+   
+  - 45-54 = 8.334
+   
+  - 55-65 = 3.392
+   
+  - 65+ = 1.171
+   
+Putem observa că cei mai mulți respondenți se află în categoria de vârstă 25-34, urmați de categoriile 35-44 și 18-24.
+
+De asemenea, cei din cateogria de vârstă 65+ sunt foarte puțini la număr spre deosebire de celelalte categorii, iar dezvoltatorii sub 18 ani sunt de 3.52 ori mai numeroși decât cei peste 65 ani.
+
+### Variabila AISelect1
+
+  - No = 26.221
+   
+  - No_Soon = 22.710
+   
+  - Yes = 39.042
+   
+Numărul celor care folosesc AI în prezent (39.042) este mai mic decât cei care nu folosesc (48.931), însă acest lucru se va schimba odată ce mai mulți respondenți din categoria No_Soon vor decide să înceapă să folosească instrumente AI.
+
+Observăm că numărul de răspunsuri pentru categoriile No și No_Soon sunt destul de apropiate.
+
+
+
+## 1.3. Afișare grafic cu utilizarea AI pe fiecare grup de vârstă
+
+```{r}
+df %>%
+  filter(!is.na(Age1) & !is.na(AISelect1)) %>%
+  group_by(AISelect1, Age1) %>%
+  dplyr::summarise(n=n()) %>%
+  mutate(freq=n/sum(n)) %>%
+  ggplot() + 
+    geom_col(aes(x=reorder(Age1,n), y=n, fill=AISelect1)) +
+    labs(x="Grupe de vârstă") +
+    scale_fill_brewer(palette="Set2")
+```
+
+Categoria 25-34: aproximativ 50% dintre respondenți declară că folosesc AI, restul de răspunsuri fiind împărțite în mod aproape egal între No și No_Soon.
+
+Categoria 35-44: mai puțin de jumătate dintre respondenți folosesc AI.
+
+Categoria 18-24: aproximativ 10.000 de programatori din această categorie folosesc AI, reprezentând 55%, ceea ce înseamnă că cei care folosesc asemenea instrumente constituie majoritatea.
+
+Avem un contrast puternic între categoriile 18- și 65+, unde se observă că există o majoritate puternică de programatori în categoria 18- care folosesc AI, în timp ce în categoria 65+ aceștia sunt în minoritate și majoritatea o constituie cei care nu folosesc și nici nu plănuiesc să folosească.
+
+Graficul ne arată că programatorii mai tineri tind să folosească instrumente AI, iar pe măsură ce vârsa respondenților înaintează, numărul de utilizatori de AI este în scădere continuă.
+
+
+
+## 1.4. Modelarea analizei corespondențelor
+
+### Tabelul de contingeță
+
+```{r}
+df_m1_ac = table(df$AISelect1, df$Age1)
+```
+
+### Aplicarea analizei corespondențelor
+
+```{r}
+df_corespondente = ca(df_m1_ac)
+summary(df_corespondente)
+```
+
+Prima dimensiune (contrastul în privința folosirii AI) are 93.9% din inerția totală.
+
+A doua dimensiune (grupa de vârstă) are 6.1% din inerția totală.
+
+Toate categoriile, atât ale variabilei Age1, cât și ale variabile AISelect1 au qlt=1000, ceea ce înseamnă că sunt foarte bine reprezentate pe hartă.
+
+Reprezentarea pe hartă
+
+```{r}
+plot(df_corespondente, lines=c(FALSE, F), main="Analiza corespondențelor")
+```
+
+Harta prezintă asocierea dintre grupele de vârstă și utilizarea de instrumente AI în procesul de dezvoltare.
+
+Se observă că grupele de vârstă 18- și 18-24 sunt cele mai apropiate de răspunsul Yes în privința utilizării AI.
+
+Grupa de vârstă 25-34 este la o distanță aproximativ egală între Yes și No_Soon. De asemenea, aceștia sunt cei mai aproape de origine, însemnând că au un comportament apropiat de medie.
+
+Respondenții din grupa 35-44 se apropie cel mai mult de No_Soon, ceea ce înseamnă că în viitor ne putem aștepta la mai mulți programatori din această categorie care să folosească AI.
+
+Pe măsură ce vârsta respondenților crește, aceștia se muta din ce în ce mai multe la stânga, cât mai departe de Yes, iar în cazul categoriei 65+ putem observa că se află într-un punct total opus categoriei 18-24.
+
+Având în vedere apropierea grupelor de vârstă tinere față de răspunsul Yes și distanțarea progresivă a grupelor de vârstă bătrâne față de același răspuns, putem trage concluzia că observațiile tinere sunt mai deschiși față de tehnologiile nou apărute, mai capabili să se adapteze noilor provocări și să folosească toate uneltele disponibile pentru a-și crește productivitatea.
+
+
+
+
+
+# 2. Regresie logistică
+Dorim să previzionăm puterea de decizie în ceea ce privește tehnologiile folosite în cadrul companiei a dezvoltatorilor. Pentru a realiza asta, este necesară crearea unei noi variabile, denumită HasTechInfl pe baza variabilei curente PurchaseInfluence. 
+
+Categorizarea dezvoltatorilor se va face în funcție de variabilele:
+
+Age1 - categoria de vârstă
+
+EdLevel - cel mai mare nivel de educație completat
+
+YearsCodePro1 - numărul de ani de experiență
+
+OrgSize1 - cât de mare este compania - din care scoatem categoria Just me și I don't know deoarce nu au relevanță
+
+
+
+## 2.1. Prelucrarea variabilelor
+
+Crearea variabilei HasTechInfl
+
+În primul rând, atașăm etichete noi variabilei PurchaseInflunce pentru a fi mai ușor de lucrat cu aceasta.
+
+```{r}
+df$PurchaseInfluence1 <- factor(df$PurchaseInfluence, labels=c("Great", "Little", "Some"))
+table(df$PurchaseInfluence1)
+```
+
+Variabila HasTechInfl va primi valorea 0 sau 1, după cum urmează:
+
+  - dacă variabila PurchaseInfluence1 are valoarea Little, primește valoarea 0
+  
+  - dacă variabila PurchaseInfluence1 are valorile Great sau Some, primește valoarea 1
+  
+```{r}
+df$HasTechInfl <- ifelse(df$PurchaseInfluence1 == "Little", 0, 1)
+table(df$HasTechInfl)
+```
+
+Observăm că există 22.734 de respondenți cu valoarea 0 și 42.233 cu valoarea 1.
+
+Transformăm variabila YearsCodePro în variabilă categorială.
+
+```{r}
+df <- df %>%
+  mutate(YearsCodePro1 = as.numeric(case_when(YearsCodePro == "Less than 1 year"  ~ "0.5",
+                                              YearsCodePro == "More than 50 years"  ~ "51",
+                                              is.na(YearsCodePro) == TRUE ~ "0",
+                                              TRUE ~ YearsCodePro)))
+
+df <- df %>%
+  mutate(YearsCodePro1 = as.factor(case_when(YearsCodePro1 <= 3 ~ "0-3",
+                                             YearsCodePro1 <= 6 ~ "4-6",
+                                             YearsCodePro1 <= 9 ~ "7-9",
+                                             YearsCodePro1 <= 12 ~ "10-12",
+                                             YearsCodePro1 <= 15 ~ "13-15",
+                                             YearsCodePro1 <= 18 ~ "16-18",
+                                             YearsCodePro1 <= 21 ~ "19-21",
+                                             YearsCodePro1 > 21 ~ "21+")))
+table(df$YearsCodePro1)
+```
+
+Scoatem categoriile Just me și I don't know din variabila OrgSize.
+
+```{r}
+df$OrgSize1 <- ifelse(startsWith(df$OrgSize, "Just me") | df$OrgSize == "I don’t know", NA, df$OrgSize)
+table(df$OrgSize1)
+```
+
+## 2.2. Crearea modelului de regresie
+
+```{r}
+df_na_filtered <- df %>% 
+  filter(!is.na(HasTechInfl),
+         !is.na(Age1), 
+         !is.na(EdLevel), 
+         !is.na(YearsCodePro1), 
+         !is.na(OrgSize1))
+
+options(scipen=999)
+
+df_m1_glm <- glm(HasTechInfl ~ Age1 + EdLevel + YearsCodePro1 + OrgSize1,
+                 data=df_na_filtered,
+                 family="binomial")
+```
+
+
+
+## 2.3. Interpretarea coeficienților
+
+```{r}
+exp(coef(df_m1_glm))
+```
+
+Valorile coeficienților dezvăluie următoarele aspecte:
+
+Variabila Age1:
+
+  - categoria de bază este 18-24
+  
+  - 18-: au cu 45% mai puține șanse de a fi încadrați în clasa 1
+  
+  - 25-34: au cu 8% mai multe șanse de a fi încadrați în clasa 1
+  
+  - 35-44: au cu 3% mai puține șanse de a fi încadrați în clasa 1
+  
+  - începând cu categoria 35-44, șansele de a fi încadrați în clasa 1 scad, ajungând până la cu 27% mai puține șanse de a fi încadrați în clasa 1 pentru grupa de vârstă 65+
+  
+Variabila EdLevel:
+
+  - categoria de bază este Associate degree
+  
+  - Bachelor's degree: cu 13% mai puține șanse pt clasa 1
+  
+  - Master's degree: cu 9% mai puține șanse pt clasa 1
+  
+  - Primary/elementary school: au cele mai mari șanse de a fi încadrați în clasa 1, cu 11% mai mari decât clasa de bază
+  
+  - Professional degree: cu 1.1% mai puține șanse pt clasa 1
+  
+  - Secondary school: cu 9% mai multe șanse pt clasa 1
+  
+  - College/university without degree: cu 1.3% mai puține șanse pt clasa 1
+  
+  - Something else: cu 1.8% mai multe șanse
+  
+  - se observă că cele mai mici probabilități de a fi încadrați în clasa 1 le au Bachelor și Master, iar cea mai mare este la Primary/elementary school
+
+Variabila YearsCodePro1:
+
+  - categoria de bază este 0-3
+  
+  - 4-6: cu 80% mai multe șanse la clasa 1
+  
+  - 7-9: cu 121% mai multe șanse la clasa 1
+  
+  - 10-12: cu 261% mai multe șanse la clasa 1
+  
+  - 13-15: de 3.37 ori mai multe șanse la clasa 1
+  
+  - 16-18: de 3.47 ori mai multe șanse la clasa 1
+  
+  - 19-21: de 3.91 ori mai multe șanse la clasa 1
+  
+  - 21+: de 4.85 ori mai multe șanse la clasa 1
+  
+  - observăm că pe măsură ce anii de experiență cresc, crește și probabilitatea de a avea un cuvânt de spus în privința tehnologiilor
+
+Variabila OrgSize1:
+
+  - categoria de bază 1.000-4.999
+  
+  - 2-9: de 9.55 ori mai multe șanse de a avea un cuvânt de spus. Având în vedere numărul scăzut de angajați, probabil respondenții sunt chiar fondatorii companiei sau singura persoană care se află într-o poziție cu putere de decizie
+  
+  - 10-19: de 5.52 ori mai multe șanse la clasa 1
+  
+  - 20-99: de 3.26 ori mai multe șanse la clasa 1
+  
+  - 100-499: de 1.75 ori mai multe șanse la clasa 1
+  
+  - 500-999: cu 26.8% mai multe șanse la clasa 1
+  
+  - 5.000-9.999: cu 23% mai puține șanse la clasa 1
+  
+  - peste 10.000 de angajați: cu 33% mai puține șanse la clasa 1
+  
+  - observăm că pe măsură ce dimensiunea companiei crește, probabilitatea de a avea putere de decizie scade
+
+
+
+## 2.4. Curba ROC
+
+```{r}
+df_m1_pred1 <- predict(df_m1_glm, type="response") # predicții pentru a construi curba
+
+y_df_m1_pred1_num1 <- ifelse(df_m1_pred1 > 0.5, 1, 0) # atribuim valoarea 1 sau 0 în funcție de predicție
+
+y_df_m1_act1 <- df_na_filtered$HasTechInfl # valorile din dataframe
+
+pred <- prediction(df_m1_pred1,y_df_m1_act1)
+pred %>% 
+  performance(measure = "tpr", x.measure = "fpr") %>% # tpr = true positive rate; fpr = false positive rate
+  plot(colorize = T, lwd = 7)
+```
+
+
+
+
+## 2.5. AUC
+
+```{r}
+df_m1_auc <- performance(pred, measure="auc")@y.values[[1]]
+df_m1_auc
+```
+
+Valoarea curbei AUC: 0.7288917 -> modelul poate fi îmbunătățit
+
+
+
+## 2.6. Matricea de confuzie
+
+```{r}
+y_df_m1_matr_conf <- factor(y_df_m1_pred1_num1, labels=c(0, 1))
+caret::confusionMatrix(data = y_df_m1_matr_conf, as.factor(y_df_m1_act1))
+```
+
+Accuracy = 0.6908 => aproximativ 31% dintre rezultate sunt false positive sau false negative
+
+P-Value < 0.05 => modelul este semnificativ statistic
+
+  - True negative = 8.876
+
+  - False negative = 5.810
+
+  - True positive = 32.167
+
+  - False positive = 12.557
+
+Se observă că modelul tinde să dea rezultatae false positive, adică să încadreze observațiile ca având putere de decizie în companie, când acestea nu au în mod real.
+
+
+
+## 2.7. Concluzii
+
+Curba ROC și AUC ne arată că modelul este bun, însă acesta poate fi îmbunătățit.
+
+Matricea de confuzie dezvăluie o acuratețe puțin scăzută deoarece aproximativ o treime din rezultate sunt false. Mai mult, modelul tinde să categorizeze observațiile ca false positive.
+
+Din coeficienții regresiei logistice se observă că schimbările procentuale în ceea ce privește nivelul de educație sunt foarte mici, această variabilă putând fi înlocuită cu una mai relevantă. Mai mult decât atât, observațiile licențiate și masterande au cele mai mici șanse de a avea putere de decizie, ceea ce poate fi considerat o anomalie. În plus, observațiile încadrate în categoriile de vârstă 18-24 și 25-34 au șanse mai ridicate de a avea putere de decizie, în timp ce categoriile 18- și 65+ prezintă cea mai mică încredere din partea angajatorilor. Anii de experineță sunt un factor determinant în ceea ce privește puterea de decizie, șansele de a fi încadrați în clasa 1 cresc direct proporțional cu numărul anilor de experiență, ceea ce arată faptul că angajatorii au mai multă încredere în angajații cu mai multă experineță. În final, probabilitatea de a avea putere de decizie scade pe măsură ce dimensiunea organizației crește deorece există mai mulți angajați cu rol de execuție față de cei cu rol de decizie.
+
+
+
+
+# 3. Arbore de clasificare
+
+Transformăm variabilele în factor
+
+```{r}
+df_na_filtered$HasTechInfl <- as.factor(df_na_filtered$HasTechInfl)
+df_na_filtered$Age1 <- as.factor(df_na_filtered$Age1)
+df_na_filtered$EdLevel <- factor(df_na_filtered$EdLevel,
+                                labels=c("ASSOC", "BACH", "MAST", "PRIM", "PROFSS", "SECND", "UNI_NO_DEG", "SOM_ELSE"))
+df_na_filtered$YearsCodePro1 <- as.factor(df_na_filtered$YearsCodePro1)
+df_na_filtered$OrgSize1 <- factor(df_na_filtered$OrgSize1,
+                                     labels=c("1k-4.99k", "10-19", "10k+", "100-499", "2-9", "20-99", "5k-9.99k", "500-999"))
+```
+
+
+
+## 3.1. Definirea seturilor de date de antrenare/testare
+
+Numărul de rânduri din setul de date
+
+```{r}
+n <- nrow(df_na_filtered)
+n
+```
+
+Definim numărul de rânduri pentru setul de antrenare
+
+```{r}
+n_train <- round(0.80 * n)
+n_train
+```
+
+Setăm seed pentru a putea reproduce rezultatul de fiecare dată când rulăm codul
+
+```{r}
+set.seed(050401)
+```
+
+Creăm un vector de indici specifici setului de date de antrenare
+
+```{r}
+train_indices <- sample(1:n, n_train)
+```
+
+Creăm un eșantion pentru setul de date de antrenare
+
+```{r}
+df_train <- df_na_filtered[train_indices, ]
+dim(df_train)
+```
+
+Creăm un eșantion pentru setul de date de testare din care excludem indicii specifici setului de date de antrenare
+
+```{r}
+df_test <- df_na_filtered[-train_indices, ]
+dim(df_test)
+```
+
+
+
+## 3.2. Construirea arborelui pe setul de antrenare
+
+```{r}
+df_arbore_train <- rpart(HasTechInfl ~ Age1 + EdLevel + YearsCodePro1 + OrgSize1,
+                         data=df_test,
+                         method="class",
+                         minsplit=2,
+                         cp=-1, # creăm adâncime arborelui pentru a afla dimensiunea potrivită
+                         minbucket=1,
+                         maxdepth=5)
+```
+
+Reprezentarea grafică a arborelui
+
+```{r}
+prp(df_arbore_train, type=2, extra=106, under=TRUE, fallen.leaves=FALSE, box.palette = "BuPu", tweak = 2.5)
+```
+
+Din graficul arborelui nu putem trage o concluzie relevată deoarece este foarte încărcat. Trebuie să alegem o dimensiune potrivită pentru acesta.
+
+```{r}
+plotcp(df_arbore_train)
+```
+
+În mod normal, dimensiunea potrivită a arborelui se află la primul punct de sub linia punctată. Din grafic se observă că punctele parametrului de complexitate se află la o distanță aproximativ egală față de linia punctată. Astfel, vom alege dimensiunea arborelui egală cu 8 (cp=0.0012) deoarece eroarea relativă încrucișată nu este mult crescută față de dimensiune 5 (cp=0.0048).
+
+
+
+## 3.3. Arborele final (prune)
+
+```{r}
+df_arbore_final <- prune(df_arbore_train, cp=0.0012)
+
+prp(df_arbore_final, type=2, extra=106, under=TRUE, fallen.leaves=FALSE, box.palette = "BuPu", tweak = 2.5)
+```
+
+
+
+## 3.4. Interpretare noduri arbore
+
+```{r}
+table(df_na_filtered$Age1)
+table(df_na_filtered$EdLevel)
+table(df_na_filtered$YearsCodePro1)
+table(df_na_filtered$OrgSize1)
+```
+
+În nodul rădăcină se află 100% din respondenți, dintre care 65% se încadrează în categoria 1 (au influență în alegerea tehnologiilor).
+
+Răspunsurile la întrebări sunt în felul următor: partea stângă corespunde răspunsului DA, iar partea dreaptă răspunsului NU.
+
+Dacă probabilitatea de a se afla în clasa 1 asociată nodului este mai mare decât 50%, nodul va avea eticheta 1, altfel nodul va avea eticheta 0.
+
+De la nodul rădăcină, prima întrebare este dacă mărimea organizației este: 1.000-4.999, 10.000+, 5.000-9.999, 500-999
+
+  - dacă este adevărat, mergem în partea stângă, unde intră 38% din respondenți și au 47% șanse de a se încadra în clasa 1 (rezultatul este clasa 0)
+
+    - următoarea întrebare este dacă numărul de ani de experiență este: 0-3, 4-6
+
+      - dacă este adevărat, mergem în partea stângă unde intră 14% din respondenți (care se potrivesc primelor 2 condiții) și au 36% șanse de a se încadra în clasa 1
+
+      - dacă este fals, mergem în partea dreaptă unde intră 24% din respondenți și au 54% șanse de a se încadra în clasa 1
+
+        - următoarea întrebae este dacă numărul de ani de experiență este 10-12, 16-18 sau 7-9
+
+          - dacă este adevărat, mergem în partea stângă unde se află 13% din eșantion, cu 49% șanse de a intra în clasa 1
+
+          - dacă este fals, mergem în partea dreaptă unde intră doar 10% din eșantion, cu 59% șanse de a intra în clasa 1
+
+  - dacă este fals, mergem în partea dreaptă, unde intră 62% din respondeți și au 75% șanse de a se afla în clasa 1
+
+    - următoarea întrebare este dacă mărimea organizației este egală cu 100
+
+      - dacă este adevărat, mergem în partea stângă unde intră 20% din respondeți și au 64% șanse de a se afla în clasa 1
+
+        - următoarea întrebare este dacă anii de expeirență sunt încadrați în 0-3 sau 4-6
+
+          - dacă este adevărat, mergem în partea stângă unde intră 7% din eșantion, cu 52% șanse de a intra în clasa 1
+
+          - dacă este fals, mergem în partea dreaptă unde se află 13% din eșantion cu 71% șanse de a intra în clasa 1
+
+      - dacă este fals, mergem în partea dreaptă unde intră 42% din respondețo și au 80% șanse de a se afla în clasa 1
+
+
+
+
+
+
+
+
+
+
+
+
